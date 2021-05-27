@@ -1,0 +1,6 @@
+{
+  "command.open.result": "&bOpening &f%menu_id% &bfor &f%player_name%",
+  "command.open.result.multiple": "&bOpening &f%menu_id% &bfor &f%player_count% &bPlayers",
+  "command.error.invalid_menu": "&cThat is not a valid menu!",
+  "command.reload.result": "&bMidnightMenus reloaded in &f%elapsed%ms&b!"
+}

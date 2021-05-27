@@ -1,0 +1,48 @@
+plugins {
+    id 'com.github.johnrengelman.shadow' version '6.1.0'
+}
+
+artifacts {
+    jar
+    sourcesJar
+}
+
+configurations {
+    shade
+    compile.extendsFrom(shade)
+}
+
+shadowJar {
+
+    setArchivesBaseName("${project.ext.archiveName}-common")
+    configurations = [ project.getConfigurations().shade ]
+
+    dependencies {
+
+        include(project(':api'))
+
+    }
+
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            version = project.ext.publicationVersion
+            artifact(jar)
+            artifact(sourcesJar)
+        }
+    }
+
+    repositories {
+        maven {
+            if (project.hasProperty("pubUrl")) {
+                url = project.pubUrl as String
+                credentials {
+                    username project.pubUser as String
+                    password project.pubPass as String
+                }
+            }
+        }
+    }
+}
