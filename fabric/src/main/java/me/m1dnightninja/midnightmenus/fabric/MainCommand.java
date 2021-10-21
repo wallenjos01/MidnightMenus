@@ -4,10 +4,10 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
 import me.m1dnightninja.midnightcore.api.module.lang.CustomPlaceholderInline;
 import me.m1dnightninja.midnightcore.api.registry.MRegistry;
-import me.m1dnightninja.midnightcore.fabric.api.PermissionHelper;
 import me.m1dnightninja.midnightcore.fabric.module.lang.LangModule;
 import me.m1dnightninja.midnightcore.fabric.player.FabricPlayer;
 import me.m1dnightninja.midnightcore.fabric.util.ConversionUtil;
+import me.m1dnightninja.midnightcore.fabric.util.PermissionUtil;
 import me.m1dnightninja.midnightmenus.api.MidnightMenusAPI;
 import me.m1dnightninja.midnightmenus.api.menu.MidnightMenu;
 import net.minecraft.commands.CommandSourceStack;
@@ -29,9 +29,9 @@ public class MainCommand {
 
         dispatcher.register(
             Commands.literal("menu")
-                .requires(context -> PermissionHelper.checkOrOp(context, "midnightmenus.command", 3))
+                .requires(context -> PermissionUtil.checkOrOp(context, "midnightmenus.command", 3))
                 .then(Commands.literal("open")
-                    .requires(context -> PermissionHelper.checkOrOp(context, "midnightmenus.command.open", 3))
+                    .requires(context -> PermissionUtil.checkOrOp(context, "midnightmenus.command.open", 3))
                     .then(Commands.argument("menu", ResourceLocationArgument.id())
                         .suggests((context, builder) -> {
                             MRegistry<MidnightMenu> menus = MidnightMenusAPI.MENU_REGISTRY;
@@ -48,7 +48,7 @@ public class MainCommand {
                     )
                 )
                 .then(Commands.literal("reload")
-                    .requires(context -> PermissionHelper.checkOrOp(context, "midnightmenus.command.open", 3))
+                    .requires(context -> PermissionUtil.checkOrOp(context, "midnightmenus.command.open", 3))
                     .executes(this::reloadCommand)
                 )
             );
@@ -62,20 +62,25 @@ public class MainCommand {
 
     private int openCommand(CommandContext<CommandSourceStack> stack, ResourceLocation menuId, List<ServerPlayer> targets) {
 
-        MidnightMenu menu = MidnightMenusAPI.MENU_REGISTRY.get(ConversionUtil.fromResourceLocation(menuId));
-        if (menu == null) {
-            LangModule.sendCommandFailure(stack, MidnightMenusAPI.getInstance().getLangProvider(), "command.error.invalid_menu");
-            return 0;
-        }
+        try {
+            MidnightMenu menu = MidnightMenusAPI.MENU_REGISTRY.get(ConversionUtil.fromResourceLocation(menuId));
+            if (menu == null) {
+                LangModule.sendCommandFailure(stack, MidnightMenusAPI.getInstance().getLangProvider(), "command.error.invalid_menu");
+                return 0;
+            }
 
-        for (ServerPlayer pl : targets) {
-            menu.open(FabricPlayer.wrap(pl), 0);
-        }
+            for (ServerPlayer pl : targets) {
+                menu.open(FabricPlayer.wrap(pl), 0);
+            }
 
-        if (targets.size() == 1) {
-            LangModule.sendCommandSuccess(stack, MidnightMenusAPI.getInstance().getLangProvider(), false, "command.open.result", FabricPlayer.wrap(targets.get(0)), new CustomPlaceholderInline("menu_id", menuId.toString()));
-        } else {
-            LangModule.sendCommandSuccess(stack, MidnightMenusAPI.getInstance().getLangProvider(), false, "command.open.result.multiple", new CustomPlaceholderInline("player_count", targets.size() + ""), new CustomPlaceholderInline("menu_id", menuId.toString()));
+            if (targets.size() == 1) {
+                LangModule.sendCommandSuccess(stack, MidnightMenusAPI.getInstance().getLangProvider(), false, "command.open.result", FabricPlayer.wrap(targets.get(0)), new CustomPlaceholderInline("menu_id", menuId.toString()));
+            } else {
+                LangModule.sendCommandSuccess(stack, MidnightMenusAPI.getInstance().getLangProvider(), false, "command.open.result.multiple", new CustomPlaceholderInline("player_count", targets.size() + ""), new CustomPlaceholderInline("menu_id", menuId.toString()));
+            }
+
+        } catch(Exception ex) {
+            ex.printStackTrace();
         }
 
         return targets.size();
@@ -84,13 +89,19 @@ public class MainCommand {
 
     private int reloadCommand(CommandContext<CommandSourceStack> context) {
 
-        long time = System.currentTimeMillis();
-        MidnightMenusAPI.getInstance().reload();
-        time = System.currentTimeMillis() - time;
+        try {
+            long time = System.currentTimeMillis();
+            MidnightMenusAPI.getInstance().reload();
+            time = System.currentTimeMillis() - time;
 
-        LangModule.sendCommandSuccess(context, MidnightMenusAPI.getInstance().getLangProvider(), false, "command.reload.result", new CustomPlaceholderInline("elapsed", time+""));
+            LangModule.sendCommandSuccess(context, MidnightMenusAPI.getInstance().getLangProvider(), false, "command.reload.result", new CustomPlaceholderInline("elapsed", time + ""));
 
-        return (int) time;
+            return (int) time;
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+
+        return 0;
     }
 
 

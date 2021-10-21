@@ -2,7 +2,7 @@ package me.m1dnightninja.midnightmenus.api.menu;
 
 import me.m1dnightninja.midnightcore.api.MidnightCoreAPI;
 import me.m1dnightninja.midnightcore.api.config.ConfigSection;
-import me.m1dnightninja.midnightcore.api.inventory.AbstractInventoryGUI;
+import me.m1dnightninja.midnightcore.api.inventory.MInventoryGUI;
 import me.m1dnightninja.midnightcore.api.inventory.MItemStack;
 import me.m1dnightninja.midnightcore.api.module.lang.ILangModule;
 import me.m1dnightninja.midnightcore.api.player.MPlayer;
@@ -17,7 +17,7 @@ import java.util.Locale;
 public class MidnightMenu {
 
     private final List<Entry> entries = new ArrayList<>();
-    private final HashMap<MPlayer, AbstractInventoryGUI> playerGuis = new HashMap<>();
+    private final HashMap<MPlayer, MInventoryGUI> playerGuis = new HashMap<>();
 
     private final MComponent title;
     private final int pageSize;
@@ -29,36 +29,55 @@ public class MidnightMenu {
         this.openRequirement = requirement;
     }
 
-    private AbstractInventoryGUI createGUI(MPlayer player) {
+    private MInventoryGUI createGUI(MPlayer player) {
 
         HashMap<Integer, Entry> visible = new HashMap<>();
         for(Entry ent : entries) {
-            if(ent.viewRequirement != null && !ent.viewRequirement.check(player)) continue;
-            if(visible.containsKey(ent.slot) && visible.get(ent.slot).priority >= ent.priority) continue;
+            if(ent.viewRequirement != null && !ent.viewRequirement.check(player)) {
+                continue;
+            }
+            if(visible.containsKey(ent.slot) && visible.get(ent.slot).priority >= ent.priority) {
+                continue;
+            }
 
             visible.put(ent.slot, ent);
         }
 
         ILangModule langModule = MidnightMenusAPI.getInstance().getLangProvider().getModule();
 
-        AbstractInventoryGUI igui = MidnightCoreAPI.getInstance().createInventoryGUI(langModule.applyPlaceholders(title, player));
+        MInventoryGUI igui = MidnightCoreAPI.getInstance().createInventoryGUI(langModule.applyPlaceholders(title, player));
 
         for(Entry ent : visible.values()) {
 
-            int aPageSize = (pageSize == 0 ? 6 : pageSize);
-            int slot = ent.slot % (aPageSize * 9);
-            igui.setItem(ent.createItem(player), slot, (type, user) -> {
-                for(MenuAction act : ent.actions.get(type)) {
-                    act.execute(MidnightMenu.this, player);
+            MItemStack is = ent.createItem(player);
+            igui.setItem(is, ent.slot, new MInventoryGUI.ClickAction() {
+
+                final Entry entry = ent;
+
+                @Override
+                public void onClick(MInventoryGUI.ClickType type, MPlayer user) {
+
+                    if(!entry.actions.containsKey(type)) {
+                        return;
+                    }
+                    for(MenuAction act : entry.actions.get(type)) {
+                        try {
+                            act.execute(MidnightMenu.this, player, is);
+
+                        } catch (Throwable th) {
+
+                            MidnightMenusAPI.getLogger().warn("An error occurred while executing a menu action!");
+                            th.printStackTrace();
+                        }
+                    }
                 }
             });
-
         }
 
         return igui;
     }
 
-    public void addEntry(int index, int priority, ConfigSection itemData, MenuRequirement viewRequirement, HashMap<AbstractInventoryGUI.ClickType, List<MenuAction>> actions ) {
+    public void addEntry(int index, int priority, ConfigSection itemData, MenuRequirement viewRequirement, HashMap<MInventoryGUI.ClickType, List<MenuAction>> actions ) {
 
         Entry ent = new Entry();
         ent.slot = index;
@@ -79,17 +98,18 @@ public class MidnightMenu {
     public void advancePage(MPlayer pl, int count) {
         if(!playerGuis.containsKey(pl)) return;
 
-        AbstractInventoryGUI gui = playerGuis.get(pl);
+        MInventoryGUI gui = playerGuis.get(pl);
         gui.open(pl, Math.max(0, Math.min(gui.pageCount(), gui.getPlayerPage(pl) + count)));
+        playerGuis.put(pl, gui);
     }
 
     public void open(MPlayer pl, int page) {
 
-        if(openRequirement != null && !openRequirement.checkOrDeny(pl)) {
+        if(openRequirement != null && !openRequirement.checkOrDeny(this, pl, null)) {
             return;
         }
 
-        AbstractInventoryGUI gui = createGUI(pl);
+        MInventoryGUI gui = createGUI(pl);
 
         gui.addCallback(this::close);
         gui.setPageSize(pageSize);
@@ -103,10 +123,9 @@ public class MidnightMenu {
     }
 
     public void close(MPlayer pl) {
-        AbstractInventoryGUI gui = playerGuis.remove(pl);
+        MInventoryGUI gui = playerGuis.remove(pl);
         if(gui != null) gui.close(pl);
     }
-
 
     public static MidnightMenu parse(ConfigSection sec) {
 
@@ -132,7 +151,7 @@ public class MidnightMenu {
         int slot;
         int priority;
         MenuRequirement viewRequirement;
-        HashMap<AbstractInventoryGUI.ClickType, List<MenuAction>> actions = new HashMap<>();
+        HashMap<MInventoryGUI.ClickType, List<MenuAction>> actions = new HashMap<>();
 
         private static ILangModule langModule;
 
@@ -193,16 +212,14 @@ public class MidnightMenu {
             ConfigSection actions = sec.getSection("actions");
             if(actions != null) {
                 for(String s : actions.getKeys()) {
-                    AbstractInventoryGUI.ClickType t = AbstractInventoryGUI.ClickType.valueOf(s.toUpperCase(Locale.ROOT));
+                    try {
+                        MInventoryGUI.ClickType t = MInventoryGUI.ClickType.valueOf(s.toUpperCase(Locale.ROOT));
+                        out.actions.put(t, actions.getListFiltered(s, MenuAction.class));
 
-                    List<MenuAction> acts = new ArrayList<>();
-                    List<ConfigSection> secs = actions.getList(s, ConfigSection.class);
-                    for(ConfigSection o : secs) {
-                        acts.add(MenuAction.SERIALIZER.deserialize(o));
+                    } catch (IllegalStateException ex) {
+
+                        MidnightMenusAPI.getLogger().warn("Unknown click type: " + s + "!");
                     }
-
-                    out.actions.put(t, acts);
-
                 }
             }
 

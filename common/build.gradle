@@ -9,7 +9,7 @@ artifacts {
 
 configurations {
     shade
-    compile.extendsFrom(shade)
+    compileOnly.extendsFrom(shade)
 }
 
 shadowJar {
@@ -33,7 +33,6 @@ publishing {
             artifact(sourcesJar)
         }
     }
-
     repositories {
         maven {
             if (project.hasProperty("pubUrl")) {

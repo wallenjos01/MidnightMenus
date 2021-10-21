@@ -16,7 +16,7 @@ repositories {
 
 configurations {
     shade
-    compile.extendsFrom(shade)
+    compileOnly.extendsFrom(shade)
 }
 
 dependencies {
@@ -35,14 +35,10 @@ processResources {
     ex.put("modid", project.ext.modid)
     ex.put("modname", project.ext.modname)
     ex.put("modclass", project.ext.modclass)
+    ex.put("minecraftVersion", project.ext.minecraftVersion)
 
-    from(sourceSets.main.resources.srcDirs) {
-        include "plugin.yml"
+    filesMatching("plugin.yml") {
         expand(ex)
-    }
-
-    from(sourceSets.main.resources.srcDirs) {
-        include "plugin.yml"
     }
 }
 
@@ -69,13 +65,10 @@ publishing {
     publications {
         mavenJava(MavenPublication) {
             version = project.ext.publicationVersion
-            artifacts {
-                jar
-                sourcesJar
-            }
+            artifact(jar)
+            artifact(sourcesJar)
         }
     }
-
     repositories {
         maven {
             if (project.hasProperty("pubUrl")) {

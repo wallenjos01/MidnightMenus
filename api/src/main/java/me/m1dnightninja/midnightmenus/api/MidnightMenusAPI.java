@@ -2,19 +2,25 @@ package me.m1dnightninja.midnightmenus.api;
 
 import me.m1dnightninja.midnightcore.api.MidnightCoreAPI;
 import me.m1dnightninja.midnightcore.api.config.ConfigProvider;
+import me.m1dnightninja.midnightcore.api.config.ConfigRegistry;
 import me.m1dnightninja.midnightcore.api.config.ConfigSection;
 import me.m1dnightninja.midnightcore.api.config.FileConfig;
 import me.m1dnightninja.midnightcore.api.module.lang.ILangModule;
 import me.m1dnightninja.midnightcore.api.module.lang.ILangProvider;
 import me.m1dnightninja.midnightcore.api.registry.MIdentifier;
 import me.m1dnightninja.midnightcore.api.registry.MRegistry;
+import me.m1dnightninja.midnightmenus.api.menu.MenuAction;
 import me.m1dnightninja.midnightmenus.api.menu.MidnightMenu;
 import me.m1dnightninja.midnightmenus.api.menu.MenuRequirement;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.File;
 import java.util.function.Consumer;
 
 public class MidnightMenusAPI {
+
+    private static final Logger LOGGER = LogManager.getLogger("MidnightMenus");
 
     public static final MRegistry<MidnightMenu> MENU_REGISTRY = new MRegistry<>();
     public static final MRegistry<MenuRequirement> REQUIREMENT_REGISTRY = new MRegistry<>();
@@ -30,12 +36,13 @@ public class MidnightMenusAPI {
 
         instance = this;
 
-        ConfigProvider prov = MidnightCoreAPI.getInstance().getDefaultConfigProvider();
+        ConfigProvider prov = ConfigRegistry.INSTANCE.getDefaultProvider();
+        MidnightCoreAPI.getInstance().getConfigRegistry().registerSerializer(MenuAction.class, MenuAction.SERIALIZER);
 
         contentFolder = new File(configFolder, "content");
         configFile = new FileConfig(new File(configFolder, "config" + prov.getFileExtension()), prov);
 
-        langProvider = MidnightCoreAPI.getInstance().getModule(ILangModule.class).createLangProvider(new File(configFolder, "lang"), prov, defaultLang);
+        langProvider = MidnightCoreAPI.getInstance().getModule(ILangModule.class).createLangProvider(new File(configFolder, "lang"), defaultLang);
 
         loadConfig();
     }
@@ -43,9 +50,7 @@ public class MidnightMenusAPI {
 
     private void loadConfig() {
 
-        ConfigProvider prov = MidnightCoreAPI.getInstance().getDefaultConfigProvider();
-
-        if(!contentFolder.exists() && !(contentFolder.mkdirs() && contentFolder.setWritable(true) && contentFolder.setReadable(true))) {
+        if(!contentFolder.exists() && !contentFolder.mkdirs()) {
 
             throw new IllegalStateException("Unable to create content folder for MidnightMenus!");
         }
@@ -64,23 +69,39 @@ public class MidnightMenusAPI {
 
             forEachFile(requirementsFolder, rf -> {
 
-                String path = rf.getName().substring(0, rf.getName().length() - prov.getFileExtension().length());
-                ConfigSection sec = prov.loadFromFile(rf);
+                try {
 
-                REQUIREMENT_REGISTRY.register(MIdentifier.create(namespace, path), MenuRequirement.SERIALIZER.deserialize(sec));
+                    FileConfig conf = FileConfig.fromFile(rf);
+                    String path = rf.getName().substring(0, rf.getName().length() - conf.getProvider().getFileExtension().length());
+
+                    REQUIREMENT_REGISTRY.register(MIdentifier.create(namespace, path), MenuRequirement.SERIALIZER.deserialize(conf.getRoot()));
+
+                } catch (Exception ex) {
+
+                    MidnightMenusAPI.getLogger().warn("An exception occurred while parsing a requirement!");
+                    ex.printStackTrace();
+                }
             });
 
             forEachFile(menusFolder, mf -> {
 
-                String path = mf.getName().substring(0, mf.getName().length() - prov.getFileExtension().length());
-                ConfigSection sec = prov.loadFromFile(mf);
+                try {
 
-                MENU_REGISTRY.register(MIdentifier.create(namespace, path), MidnightMenu.parse(sec));
+                    FileConfig conf = FileConfig.fromFile(mf);
+                    String path = mf.getName().substring(0, mf.getName().length() - conf.getProvider().getFileExtension().length());
+
+                    MENU_REGISTRY.register(MIdentifier.create(namespace, path), MidnightMenu.parse(conf.getRoot()));
+
+                } catch (Exception ex) {
+
+                    MidnightMenusAPI.getLogger().warn("An exception occurred while parsing a menu!");
+                    ex.printStackTrace();
+                }
             });
         });
 
-        System.out.println("Registered " + REQUIREMENT_REGISTRY.getSize() + " requirements.");
-        System.out.println("Registered " + MENU_REGISTRY.getSize() + " menus.");
+        LOGGER.info("Registered " + REQUIREMENT_REGISTRY.getSize() + " requirements.");
+        LOGGER.info("Registered " + MENU_REGISTRY.getSize() + " menus.");
     }
 
 
@@ -100,6 +121,10 @@ public class MidnightMenusAPI {
     public static MidnightMenusAPI getInstance() {
         return instance;
     }
+
+    public static Logger getLogger() { return LOGGER; }
+
+    public ConfigSection getConfig() { return configFile.getRoot(); }
 
     public ILangProvider getLangProvider() {
         return langProvider;
