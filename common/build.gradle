@@ -1,47 +1,21 @@
-plugins {
-    id 'com.github.johnrengelman.shadow' version '6.1.0'
-}
+repositories {
 
-artifacts {
-    jar
-    sourcesJar
-}
-
-configurations {
-    shade
-    compileOnly.extendsFrom(shade)
-}
-
-shadowJar {
-
-    setArchivesBaseName("${project.ext.archiveName}-common")
-    configurations = [ project.getConfigurations().shade ]
-
-    dependencies {
-
-        include(project(':api'))
-
+    maven {
+        url "https://libraries.minecraft.net/"
     }
-
 }
 
-publishing {
-    publications {
-        mavenJava(MavenPublication) {
-            version = project.ext.publicationVersion
-            artifact(jar)
-            artifact(sourcesJar)
-        }
-    }
-    repositories {
-        maven {
-            if (project.hasProperty("pubUrl")) {
-                url = project.pubUrl as String
-                credentials {
-                    username project.pubUser as String
-                    password project.pubPass as String
-                }
-            }
-        }
-    }
+dependencies {
+
+    compileOnly 'com.mojang:authlib:2.1.28'
+    compileOnly "org.wallentines.midnightcore:common:1.0-SNAPSHOT"
+    compileOnly project(":api")
+
+    testImplementation 'junit:junit:4.13.2'
+}
+
+test {
+
+    useJUnit()
+    maxHeapSize = '1G'
 }

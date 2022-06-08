@@ -1,10 +1,10 @@
-package me.m1dnightninja.midnightmenus.api.menu;
+package org.wallentines.midnightmenus.api.menu;
 
-import me.m1dnightninja.midnightcore.api.config.ConfigSection;
-import me.m1dnightninja.midnightcore.api.config.ConfigSerializer;
-import me.m1dnightninja.midnightcore.api.inventory.MItemStack;
-import me.m1dnightninja.midnightcore.api.player.MPlayer;
-import me.m1dnightninja.midnightcore.api.registry.MIdentifier;
+import org.wallentines.midnightcore.api.item.MItemStack;
+import org.wallentines.midnightcore.api.player.MPlayer;
+import org.wallentines.midnightlib.config.ConfigSection;
+import org.wallentines.midnightlib.config.serialization.ConfigSerializer;
+import org.wallentines.midnightlib.registry.Identifier;
 
 public class MenuAction {
 
@@ -35,7 +35,7 @@ public class MenuAction {
         @Override
         public MenuAction deserialize(ConfigSection section) {
 
-            MenuActionType type = MenuActionType.ACTION_TYPE_REGISTRY.get(MIdentifier.parseOrDefault(section.getString("type"), "midnightmenus"));
+            MenuActionType type = MenuActionType.ACTION_TYPE_REGISTRY.get(Identifier.parseOrDefault(section.getString("type"), "midnightmenus"));
             String value = section.has("value") ? section.getString("value") : "";
 
             MenuRequirement requirement = null;
