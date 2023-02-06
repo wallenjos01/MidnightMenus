@@ -1,16 +1,15 @@
 package org.wallentines.midnightmenus.common;
 
-import org.wallentines.midnightcore.api.MidnightCoreAPI;
-import org.wallentines.midnightcore.api.module.lang.LangModule;
-import org.wallentines.midnightcore.api.module.lang.LangProvider;
+import org.wallentines.mdcfg.ConfigObject;
+import org.wallentines.mdcfg.codec.FileWrapper;
+import org.wallentines.mdcfg.serializer.ConfigContext;
+import org.wallentines.midnightcore.api.text.LangProvider;
 import org.wallentines.midnightcore.common.util.FileUtil;
-import org.wallentines.midnightlib.config.ConfigRegistry;
-import org.wallentines.midnightlib.config.ConfigSection;
-import org.wallentines.midnightlib.config.FileConfig;
+import org.wallentines.mdcfg.ConfigSection;
+import org.wallentines.midnightcore.api.FileConfig;
 import org.wallentines.midnightlib.registry.Identifier;
 import org.wallentines.midnightlib.registry.Registry;
 import org.wallentines.midnightmenus.api.MidnightMenusAPI;
-import org.wallentines.midnightmenus.api.menu.MenuAction;
 import org.wallentines.midnightmenus.api.menu.MenuRequirement;
 import org.wallentines.midnightmenus.api.menu.MidnightMenu;
 
@@ -20,8 +19,8 @@ import java.util.function.Consumer;
 
 public class MidnightMenusImpl extends MidnightMenusAPI {
 
-    public static final Registry<MidnightMenu> MENU_REGISTRY = new Registry<>();
-    public static final Registry<MenuRequirement> REQUIREMENT_REGISTRY = new Registry<>();
+    public static final Registry<MidnightMenu> MENU_REGISTRY = new Registry<>("midnightmenus");
+    public static final Registry<MenuRequirement> REQUIREMENT_REGISTRY = new Registry<>("midnightmenus");
 
     private final File contentFolder;
     private final FileConfig configFile;
@@ -30,7 +29,7 @@ public class MidnightMenusImpl extends MidnightMenusAPI {
 
     public MidnightMenusImpl(Path configFolder, ConfigSection defaultLang) {
 
-        ConfigRegistry.INSTANCE.registerSerializer(MenuAction.class, MenuAction.SERIALIZER);
+        //ConfigRegistry.INSTANCE.registerSerializer(MenuAction.class, MenuAction.SERIALIZER);
 
         File dataFolder = FileUtil.tryCreateDirectory(configFolder);
         if(dataFolder == null) {
@@ -40,7 +39,8 @@ public class MidnightMenusImpl extends MidnightMenusAPI {
         contentFolder = configFolder.resolve("content").toFile();
         configFile = FileConfig.findOrCreate("config", configFolder.toFile());
 
-        langProvider = MidnightCoreAPI.getInstance().getModuleManager().getModule(LangModule.class).createProvider(configFolder.resolve("lang"), defaultLang);
+        FileUtil.tryCreateDirectory(configFolder.resolve("lang"));
+        langProvider = new LangProvider(configFolder.resolve("lang"), defaultLang);
 
         loadConfig();
     }
@@ -69,10 +69,10 @@ public class MidnightMenusImpl extends MidnightMenusAPI {
 
                 try {
 
-                    FileConfig conf = FileConfig.fromFile(rf);
-                    String path = rf.getName().substring(0, rf.getName().length() - conf.getProvider().getFileExtension().length());
+                    FileWrapper<ConfigObject> conf = FileConfig.REGISTRY.fromFile(ConfigContext.INSTANCE, rf);
+                    String path = rf.getName().substring(0, rf.getName().lastIndexOf("."));
 
-                    REQUIREMENT_REGISTRY.register(new Identifier(namespace, path), MenuRequirement.SERIALIZER.deserialize(conf.getRoot()));
+                    REQUIREMENT_REGISTRY.register(new Identifier(namespace, path), MenuRequirement.SERIALIZER.deserialize(ConfigContext.INSTANCE, conf.getRoot().asSection()).getOrThrow());
 
                 } catch (Exception ex) {
 
@@ -85,10 +85,10 @@ public class MidnightMenusImpl extends MidnightMenusAPI {
 
                 try {
 
-                    FileConfig conf = FileConfig.fromFile(mf);
-                    String path = mf.getName().substring(0, mf.getName().length() - conf.getProvider().getFileExtension().length());
+                    FileWrapper<ConfigObject> conf = FileConfig.REGISTRY.fromFile(ConfigContext.INSTANCE, mf);
+                    String path = mf.getName().substring(0, mf.getName().lastIndexOf("."));
 
-                    MENU_REGISTRY.register(new Identifier(namespace, path), MidnightMenu.parse(conf.getRoot()));
+                    MENU_REGISTRY.register(new Identifier(namespace, path), MidnightMenu.SERIALIZER.deserialize(ConfigContext.INSTANCE, conf.getRoot().asSection()).getOrThrow());
 
                 } catch (Exception ex) {
 
@@ -108,7 +108,7 @@ public class MidnightMenusImpl extends MidnightMenusAPI {
         if(folder == null || !folder.exists() || !folder.isDirectory()) return;
 
         File[] fs = folder.listFiles();
-        if(fs == null || fs.length == 0) return;
+        if(fs == null) return;
 
         for(File f : fs) {
             func.accept(f);

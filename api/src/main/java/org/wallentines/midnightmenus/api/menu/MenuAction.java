@@ -1,10 +1,9 @@
 package org.wallentines.midnightmenus.api.menu;
 
+import org.wallentines.mdcfg.serializer.ObjectSerializer;
+import org.wallentines.mdcfg.serializer.Serializer;
 import org.wallentines.midnightcore.api.item.MItemStack;
 import org.wallentines.midnightcore.api.player.MPlayer;
-import org.wallentines.midnightlib.config.ConfigSection;
-import org.wallentines.midnightlib.config.serialization.ConfigSerializer;
-import org.wallentines.midnightlib.registry.Identifier;
 
 public class MenuAction {
 
@@ -31,25 +30,11 @@ public class MenuAction {
 
     }
 
-    public static final ConfigSerializer<MenuAction> SERIALIZER = new ConfigSerializer<>() {
-        @Override
-        public MenuAction deserialize(ConfigSection section) {
-
-            MenuActionType type = MenuActionType.ACTION_TYPE_REGISTRY.get(Identifier.parseOrDefault(section.getString("type"), "midnightmenus"));
-            String value = section.has("value") ? section.getString("value") : "";
-
-            MenuRequirement requirement = null;
-            if(section.has("requirement", ConfigSection.class)) {
-                requirement = MenuRequirement.SERIALIZER.deserialize(section.getSection("requirement"));
-            }
-
-            return new MenuAction(type, value, requirement);
-        }
-
-        @Override
-        public ConfigSection serialize(MenuAction object) {
-            return null;
-        }
-    };
+    public static final Serializer<MenuAction> SERIALIZER = ObjectSerializer.create(
+            MenuActionType.ACTION_TYPE_REGISTRY.nameSerializer().entry("type", ma -> ma.type),
+            Serializer.STRING.entry("value", ma -> ma.value),
+            MenuRequirement.SERIALIZER.<MenuAction>entry("requirement", ma -> ma.requirement).optional(),
+            MenuAction::new
+    );
 
 }

@@ -1,18 +1,16 @@
 package org.wallentines.midnightmenus.api.menu;
 
-import org.wallentines.midnightcore.api.MidnightCoreAPI;
+import org.wallentines.mdcfg.ConfigObject;
+import org.wallentines.mdcfg.ConfigSection;
+import org.wallentines.mdcfg.serializer.*;
 import org.wallentines.midnightcore.api.item.InventoryGUI;
 import org.wallentines.midnightcore.api.item.MItemStack;
-import org.wallentines.midnightcore.api.module.lang.LangModule;
 import org.wallentines.midnightcore.api.player.MPlayer;
 import org.wallentines.midnightcore.api.text.MComponent;
-import org.wallentines.midnightlib.config.ConfigSection;
+import org.wallentines.midnightcore.api.text.PlaceholderManager;
 import org.wallentines.midnightmenus.api.MidnightMenusAPI;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
+import java.util.*;
 
 public class MidnightMenu {
 
@@ -48,9 +46,7 @@ public class MidnightMenu {
             visible.put(ent.slot, ent);
         }
 
-        LangModule langModule = MidnightMenusAPI.getInstance().getLangProvider().getModule();
-
-        InventoryGUI igui = MidnightCoreAPI.getInstance().createGUI(langModule.applyPlaceholders(title, player));
+        InventoryGUI igui = player.getServer().getMidnightCore().createGUI(PlaceholderManager.INSTANCE.applyPlaceholders(title, player));
 
         for(Entry ent : visible.values()) {
 
@@ -127,77 +123,87 @@ public class MidnightMenu {
         return commandPermission;
     }
 
-    public static MidnightMenu parse(ConfigSection sec) {
 
-        MComponent title = MComponent.parse(sec.getString("title"));
-        int pageSize = sec.has("page_size", Number.class) ? sec.getInt("page_size") : 0;
-        MenuRequirement req = sec.has("requirement", ConfigSection.class) ? MenuRequirement.SERIALIZER.deserialize(sec.getSection("requirement")) : null;
+    public static final Serializer<MidnightMenu> SERIALIZER = ObjectSerializer.create(
+            MComponent.SERIALIZER.entry("title", menu -> menu.title),
+            NumberSerializer.forInt(0, 6).<MidnightMenu>entry("page_size", menu -> menu.pageSize).orElse(0),
+            MenuRequirement.SERIALIZER.<MidnightMenu>entry("requirement", menu -> menu.openRequirement).optional(),
+            Serializer.STRING.entry("command", MidnightMenu::getCommand).optional(),
+            Serializer.STRING.entry("command_permission", MidnightMenu::getCommandPermission).optional(),
+            Entry.SERIALIZER.listOf().entry("entries", menu -> menu.entries),
+            (title, size, requirement, command, commandPerm, entries) -> {
 
-        String command = sec.getOrDefault("command", null, String.class);
-        String commandPermission = sec.getOrDefault("command_permission", null, String.class);
-
-        MidnightMenu out = new MidnightMenu(title, pageSize, req, command, commandPermission);
-
-        sec.getListFiltered("entries", ConfigSection.class).forEach(ent -> out.entries.add(Entry.parse(ent)));
-        return out;
-    }
+                MidnightMenu out = new MidnightMenu(title, size, requirement, command, commandPerm);
+                out.entries.addAll(entries);
+                return out;
+            }
+    );
 
 
     private static class Entry {
         MItemStack item;
         String name;
-        List<String> lore;
+        List<String> lore = new ArrayList<>();
         int slot;
         int priority;
         MenuRequirement viewRequirement;
-        HashMap<InventoryGUI.ClickType, List<MenuAction>> actions = new HashMap<>();
+        HashMap<InventoryGUI.ClickType, Collection<MenuAction>> actions = new HashMap<>();
+
+
+        public Entry(MItemStack item, String name, Collection<String> lore, int slot, int priority, MenuRequirement viewRequirement, Map<InventoryGUI.ClickType, Collection<MenuAction>> actions) {
+            this.item = item;
+            this.name = name;
+            if(lore != null) this.lore.addAll(lore);
+            this.slot = slot;
+            this.priority = priority;
+            this.viewRequirement = viewRequirement;
+            if(actions != null) this.actions.putAll(actions);
+        }
 
         public MItemStack getItem(MidnightMenu menu, MPlayer player) {
 
-            MItemStack is = item.copy();
-            LangModule mod = MidnightCoreAPI.getInstance().getModuleManager().getModule(LangModule.class);
-            if(name != null) {
-                is.setName(mod.parseText(name, player, menu));
+            ConfigSection tag = item.getTag().copy();
+            resolveTag(player, tag);
+
+            MItemStack.Builder builder = MItemStack.Builder.of(item.getType()).withAmount(item.getCount()).withTag(tag);
+
+            if (name != null) {
+                builder.withName(PlaceholderManager.INSTANCE.parseText(name, player, menu));
             }
-            if(lore != null) {
+            if (lore != null) {
                 List<MComponent> newLore = new ArrayList<>();
-                lore.forEach(str -> newLore.add(mod.parseText(str, player, menu)));
-                is.setLore(newLore);
+                lore.forEach(str -> newLore.add(PlaceholderManager.INSTANCE.parseText(str, player, menu)));
+                builder.withLore(newLore);
             }
-            return is;
+            return builder.build();
         }
 
-        static Entry parse(ConfigSection sec) {
+        private ConfigSection resolveTag(MPlayer player, ConfigSection section) {
 
-            Entry out = new Entry();
-
-            out.slot = sec.getInt("slot");
-            out.priority = sec.has("priority") ? sec.getInt("priority") : 0;
-            out.item = sec.get("item", MItemStack.class);
-            out.name = sec.getOrDefault("name", null, String.class);
-            out.viewRequirement = sec.has("requirement", ConfigSection.class) ? MenuRequirement.SERIALIZER.deserialize(sec.getSection("requirement")) : null;
-
-            if(sec.has("lore", List.class)) out.lore = sec.getListFiltered("lore", String.class);
-
-            ConfigSection actions = sec.getSection("actions");
-            if(actions != null) {
-                for(String s : actions.getKeys()) {
-                    try {
-                        InventoryGUI.ClickType t = InventoryGUI.ClickType.valueOf(s.toUpperCase(Locale.ROOT));
-                        out.actions.put(t, actions.getListFiltered(s, MenuAction.class));
-
-                    } catch (IllegalStateException ex) {
-
-                        MidnightMenusAPI.getLogger().warn("Unknown click type: " + s + "!");
-                    }
+            for(String key : section.getKeys()) {
+                ConfigObject obj = section.get(key);
+                if(obj.isSection()) {
+                    section.set(key, resolveTag(player, obj.asSection()));
+                } else if(obj.isString()) {
+                    section.set(key, PlaceholderManager.INSTANCE.applyPlaceholdersFlattened(obj.asString(), player));
+                } else {
+                    section.set(key, obj);
                 }
             }
-
-            return out;
-
+            return section;
         }
 
 
+        static final Serializer<Entry> SERIALIZER = ObjectSerializer.create(
+                MItemStack.SERIALIZER.entry("item", e -> e.item),
+                Serializer.STRING.<Entry>entry("name", e -> e.name).optional(),
+                Serializer.STRING.listOf().<Entry>entry("lore", e -> e.lore).optional(),
+                Serializer.INT.entry("slot", e -> e.slot),
+                Serializer.INT.<Entry>entry("priority", e -> e.priority).orElse(0),
+                MenuRequirement.SERIALIZER.<Entry>entry("requirement", e -> e.viewRequirement).optional(),
+                MenuAction.SERIALIZER.listOf().mapOf(InlineSerializer.of(InventoryGUI.ClickType::name, str -> InventoryGUI.ClickType.valueOf(str.toUpperCase()))).<Entry>entry("actions", e -> e.actions).optional(),
+                Entry::new
+        );
     }
 
 }

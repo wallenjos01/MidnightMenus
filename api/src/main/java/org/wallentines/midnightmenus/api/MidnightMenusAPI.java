@@ -1,7 +1,7 @@
 package org.wallentines.midnightmenus.api;
 
-import org.wallentines.midnightcore.api.module.lang.LangProvider;
-import org.wallentines.midnightlib.config.ConfigSection;
+import org.wallentines.midnightcore.api.text.LangProvider;
+import org.wallentines.mdcfg.ConfigSection;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.wallentines.midnightlib.registry.Registry;

@@ -3,10 +3,9 @@ package org.wallentines.midnightmenus.fabric;
 import me.lucko.fabric.api.permissions.v0.Permissions;
 import net.fabricmc.api.ModInitializer;
 import net.minecraft.commands.Commands;
-import org.wallentines.midnightcore.fabric.event.MidnightCoreAPICreatedEvent;
+import org.wallentines.mdcfg.codec.JSONCodec;
 import org.wallentines.midnightcore.fabric.event.server.CommandLoadEvent;
 import org.wallentines.midnightcore.fabric.player.FabricPlayer;
-import org.wallentines.midnightlib.config.serialization.json.JsonConfigProvider;
 import org.wallentines.midnightlib.event.Event;
 import org.wallentines.midnightmenus.api.menu.MidnightMenu;
 import org.wallentines.midnightmenus.common.MidnightMenusImpl;
@@ -20,10 +19,7 @@ public class MidnightMenus implements ModInitializer {
     @Override
     public void onInitialize() {
 
-        Event.register(MidnightCoreAPICreatedEvent.class, this, event -> {
-
-            api = new MidnightMenusImpl(Paths.get("config/MidnightMenus"), JsonConfigProvider.INSTANCE.loadFromStream(getClass().getResourceAsStream("/midnightmenus/lang/en_us.json")));
-        });
+        api = new MidnightMenusImpl(Paths.get("config/MidnightMenus"), JSONCodec.loadConfig(getClass().getResourceAsStream("/midnightmenus/lang/en_us.json")).asSection());
 
         Event.register(CommandLoadEvent.class, this, event -> {
 

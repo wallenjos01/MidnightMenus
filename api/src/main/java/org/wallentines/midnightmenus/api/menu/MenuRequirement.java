@@ -1,11 +1,11 @@
 package org.wallentines.midnightmenus.api.menu;
 
-import org.wallentines.midnightcore.api.MidnightCoreAPI;
+import org.wallentines.mdcfg.serializer.SerializeContext;
+import org.wallentines.mdcfg.serializer.SerializeResult;
+import org.wallentines.mdcfg.serializer.Serializer;
+import org.wallentines.midnightcore.api.Registries;
 import org.wallentines.midnightcore.api.item.MItemStack;
 import org.wallentines.midnightcore.api.player.MPlayer;
-import org.wallentines.midnightlib.config.ConfigSection;
-import org.wallentines.midnightlib.config.serialization.ConfigSerializer;
-import org.wallentines.midnightlib.registry.Identifier;
 import org.wallentines.midnightlib.registry.Registry;
 import org.wallentines.midnightlib.requirement.Requirement;
 import org.wallentines.midnightlib.requirement.RequirementType;
@@ -28,7 +28,7 @@ public class MenuRequirement {
     @Override
     public String toString() {
 
-        Registry<RequirementType<MPlayer>> reg = MidnightCoreAPI.getInstance().getRequirementRegistry();
+        Registry<RequirementType<MPlayer>> reg = Registries.REQUIREMENT_REGISTRY;
 
         return reg.getId(requirement.getType()) + "(" + requirement.getValue() + ")";
     }
@@ -43,40 +43,47 @@ public class MenuRequirement {
         return false;
     }
 
-    public static final ConfigSerializer<MenuRequirement> SERIALIZER = new ConfigSerializer<>() {
+    public static final Serializer<MenuRequirement> SERIALIZER = new Serializer<>() {
+
         @Override
-        public MenuRequirement deserialize(ConfigSection section) {
+        public <O> SerializeResult<O> serialize(SerializeContext<O> context, MenuRequirement value) {
 
-            if(section.has("id", String.class)) {
+            Serializer<Requirement<MPlayer>> serializer = Requirement.serializer(Registries.REQUIREMENT_REGISTRY);
+            SerializeResult<O> res = serializer.serialize(context, value.requirement);
+            if(!res.isComplete()) return SerializeResult.failure(res.getError());
 
-                Identifier id = Identifier.parse("id");
-                MenuRequirement out = MidnightMenusAPI.getInstance().getRequirementRegistry().get(id);
-                if(out != null) return out;
+            O out = res.getOrThrow();
+            if(value.denyAction != null) {
 
+                SerializeResult<O> denyResult = MenuAction.SERIALIZER.serialize(context, value.denyAction);
+                if(!denyResult.isComplete()) return SerializeResult.failure(res.getError());
+
+                context.set("deny_action", denyResult.getOrThrow(), out);
             }
 
-            Requirement.RequirementSerializer<MPlayer> serializer = new Requirement.RequirementSerializer<>(MidnightCoreAPI.getInstance().getRequirementRegistry());
-            Requirement<MPlayer> req = serializer.deserialize(section);
-            MenuAction action = null;
-
-            if (section.has("deny_action", ConfigSection.class)) {
-                action = MenuAction.SERIALIZER.deserialize(section.getSection("deny_action"));
-            }
-
-            return new MenuRequirement(req, action);
+            return SerializeResult.success(out);
         }
 
         @Override
-        public ConfigSection serialize(MenuRequirement object) {
+        public <O> SerializeResult<MenuRequirement> deserialize(SerializeContext<O> context, O value) {
 
-            Requirement.RequirementSerializer<MPlayer> serializer = new Requirement.RequirementSerializer<>(MidnightCoreAPI.getInstance().getRequirementRegistry());
-            ConfigSection out = serializer.serialize(object.requirement);
-            if(object.denyAction != null) {
-                out.set("deny_action", MenuAction.SERIALIZER.serialize(object.denyAction));
+            Registry<MenuRequirement> registry = MidnightMenusAPI.getInstance().getRequirementRegistry();
+            O id = context.get("id", value);
+            if(context.isString(id)) {
+                return registry.nameSerializer().deserialize(context, id);
             }
 
-            return out;
+            Serializer<Requirement<MPlayer>> serializer = Requirement.serializer(Registries.REQUIREMENT_REGISTRY);
+            SerializeResult<Requirement<MPlayer>> res = serializer.deserialize(context, value);
+            if(!res.isComplete()) return SerializeResult.failure(res.getError());
+
+            O deny = context.get("deny_action", value);
+            MenuAction act = null;
+            if(deny != null) {
+                act = MenuAction.SERIALIZER.deserialize(context, deny).get().orElse(null);
+            }
+
+            return SerializeResult.success(new MenuRequirement(res.getOrThrow(), act));
         }
     };
-
 }
